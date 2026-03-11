@@ -42,7 +42,9 @@ export function buildArticlePrompts(
   const intelSection = opts.geoContext ? `\n\n${opts.geoContext}` : '';
   const isTechVariant = opts.variant === 'tech';
   const dateContext = `Current date: ${new Date().toISOString().split('T')[0]}.${isTechVariant ? '' : ' Provide geopolitical context appropriate for the current date.'}`;
-  const langInstruction = opts.lang && opts.lang !== 'en' ? `\nIMPORTANT: Output the summary in ${opts.lang.toUpperCase()} language.` : '';
+  const LANG_NAMES: Record<string, string> = { tr: 'Turkish', fr: 'French', de: 'German', es: 'Spanish', it: 'Italian', pl: 'Polish', pt: 'Portuguese', nl: 'Dutch', sv: 'Swedish', ru: 'Russian', ar: 'Arabic', zh: 'Chinese', ja: 'Japanese', ko: 'Korean', th: 'Thai', vi: 'Vietnamese', el: 'Greek', cs: 'Czech', bg: 'Bulgarian' };
+  const langName = opts.lang && opts.lang !== 'en' ? (LANG_NAMES[opts.lang] || opts.lang) : '';
+  const langInstruction = langName ? `\nIMPORTANT: You MUST respond ENTIRELY in ${langName} language.` : '';
 
   let systemPrompt: string;
   let userPrompt: string;
@@ -86,7 +88,7 @@ Rules:
 - NEVER combine facts from different headlines
 - Focus ONLY on technology implications: funding trends, AI developments, market shifts, product strategy
 - IGNORE political implications, trade wars, government unless directly about tech policy
-- Lead with the insight, no filler or elaboration`;
+- Lead with the insight, no filler or elaboration${langInstruction}`;
     } else {
       systemPrompt = `${dateContext}
 
@@ -98,7 +100,7 @@ Rules:
 - Lead with the insight - what's significant and why
 - NEVER start with "Breaking news", "Tonight", "The key/dominant narrative is"
 - Start with substance, no filler or elaboration
-- If intelligence context is provided, use it only if it relates to your chosen headline`;
+- If intelligence context is provided, use it only if it relates to your chosen headline${langInstruction}`;
     }
     userPrompt = isTechVariant
       ? `Each headline is a separate story. What's the key tech trend?\n${headlineText}${intelSection}`

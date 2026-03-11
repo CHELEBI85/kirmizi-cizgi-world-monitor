@@ -3,6 +3,16 @@
  */
 import { CHROME_UA, yahooGate } from '../../../_shared/constants';
 
+const YAHOO_WARN_THROTTLE_MS = 60_000;
+let lastYahooWarn = 0;
+function throttleWarn(msg: string): void {
+  const now = Date.now();
+  if (now - lastYahooWarn >= YAHOO_WARN_THROTTLE_MS) {
+    lastYahooWarn = now;
+    console.warn(msg);
+  }
+}
+
 // ========================================================================
 // Relay helpers (Railway proxy for Yahoo when Vercel IPs are rate-limited)
 // ========================================================================
@@ -198,16 +208,16 @@ export async function fetchYahooQuote(
       const parsed = parseYahooChartResponse(data);
       if (parsed) return parsed;
     } else {
-      console.warn(`[Yahoo] ${symbol} direct HTTP ${resp.status}`);
+      throttleWarn(`[Yahoo] Market quotes rate limited (429) or error. Set WS_RELAY_URL for relay fallback.`);
     }
   } catch (err) {
-    console.warn(`[Yahoo] ${symbol} direct error:`, (err as Error).message);
+    throttleWarn(`[Yahoo] Market quote error (${symbol}). Set WS_RELAY_URL for relay fallback.`);
   }
 
   // Fallback: Railway relay (different IP, not rate-limited by Yahoo)
   const relayBase = getRelayBaseUrl();
   if (!relayBase) {
-    console.warn(`[Yahoo] ${symbol} relay skipped: WS_RELAY_URL not set`);
+    throttleWarn(`[Yahoo] Relay skipped: WS_RELAY_URL not set. Deploy relay for fallback.`);
     return null;
   }
   try {
@@ -217,13 +227,13 @@ export async function fetchYahooQuote(
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
     if (!resp.ok) {
-      console.warn(`[Yahoo] ${symbol} relay HTTP ${resp.status}: ${await resp.text().catch(() => '')}`);
+      throttleWarn(`[Yahoo] Relay HTTP ${resp.status} for ${symbol}.`);
       return null;
     }
     const data: YahooChartResponse = await resp.json();
     return parseYahooChartResponse(data);
   } catch (err) {
-    console.warn(`[Yahoo] ${symbol} relay error:`, (err as Error).message);
+    throttleWarn(`[Yahoo] Relay error for ${symbol}.`);
     return null;
   }
 }

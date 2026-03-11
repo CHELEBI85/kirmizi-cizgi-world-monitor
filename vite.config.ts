@@ -1,3 +1,7 @@
+import 'dotenv/config';
+import { config as loadEnvLocal } from 'dotenv';
+loadEnvLocal({ path: '.env.local', override: true });
+
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { resolve, dirname, extname } from 'path';

@@ -1,4 +1,4 @@
-{
+﻿{
   "panels": {
     "liveNews": "Live nieuws",
     "markets": "Markten",
@@ -2081,7 +2081,7 @@
     "panelCatTradePolicy": "Handelsbeleid"
   },
   "app": {
-    "title": "World Monitor",
+    "title": "Kırmızı Çizgi",
     "description": "Mondiale situatie met AI-inzichten"
   },
   "countryBrief": {

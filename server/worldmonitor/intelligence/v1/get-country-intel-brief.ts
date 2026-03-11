@@ -64,7 +64,12 @@ Rules:
 - 4-5 paragraphs, 250-350 words
 - No speculation beyond what data supports
 - Use plain language, not jargon
-- If a context snapshot is provided, explicitly reflect each non-zero signal category in the brief${lang === 'fr' ? '\n- IMPORTANT: You MUST respond ENTIRELY in French language.' : ''}`;
+- If a context snapshot is provided, explicitly reflect each non-zero signal category in the brief${(() => {
+  if (!lang || lang === 'en') return '';
+  const LANG_NAMES: Record<string, string> = { tr: 'Turkish', fr: 'French', de: 'German', es: 'Spanish', it: 'Italian', pl: 'Polish', pt: 'Portuguese', nl: 'Dutch', sv: 'Swedish', ru: 'Russian', ar: 'Arabic', zh: 'Chinese', ja: 'Japanese', ko: 'Korean', th: 'Thai', vi: 'Vietnamese', el: 'Greek', cs: 'Czech', bg: 'Bulgarian' };
+  const langName = LANG_NAMES[lang] || lang;
+  return `\n- IMPORTANT: You MUST respond ENTIRELY in ${langName} language.`;
+})()}`;
 
   let result: GetCountryIntelBriefResponse | null = null;
   try {

@@ -372,6 +372,19 @@ canvas,
   color: var(--accent);
 }
 
+.logo-img {
+  height: 28px;
+  width: auto;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.logo-img-light { display: none; }
+.logo-img-dark  { display: inline-block; }
+
+[data-theme="light"] .logo-img-dark  { display: none; }
+[data-theme="light"] .logo-img-light { display: inline-block; }
+
 .version {
   font-size: 9px;
   color: var(--muted);

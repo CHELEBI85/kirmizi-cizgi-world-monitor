@@ -2,7 +2,7 @@ import { Panel } from './Panel';
 import type { NewsItem } from '@/types';
 import { generateSummary } from '@/services/summarization';
 import { escapeHtml, sanitizeUrl } from '@/utils/sanitize';
-import { t } from '@/services/i18n';
+import { t, getCurrentLanguage } from '@/services/i18n';
 
 /**
  * GoodThingsDigestPanel -- Displays the top 5 positive stories of the day,
@@ -76,6 +76,7 @@ export class GoodThingsDigestPanel extends Panel {
           [item.title, item.source],
           undefined,
           item.locationName,
+          getCurrentLanguage(),
         );
         if (signal.aborted || !this.element?.isConnected) return;
         const summary = result?.summary ?? item.title.slice(0, 200);

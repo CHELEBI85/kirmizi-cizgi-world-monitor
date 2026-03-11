@@ -111,7 +111,9 @@ async function tryBrowserT5(headlines: string[], modelId?: string): Promise<Summ
     const combinedText = headlines.slice(0, 5).map(h => h.slice(0, 80)).join('. ');
     const prompt = lang === 'fr'
       ? `Résumez le titre le plus important en 2 phrases concises (moins de 60 mots) : ${combinedText}`
-      : `Summarize the most important headline in 2 concise sentences (under 60 words): ${combinedText}`;
+      : lang === 'tr'
+        ? `En önemli haberi 2 kısa cümlede özetle (60 kelimeden az): ${combinedText}`
+        : `Summarize the most important headline in 2 concise sentences (under 60 words): ${combinedText}`;
 
     const [summary] = await mlWorker.summarize([prompt], modelId);
 

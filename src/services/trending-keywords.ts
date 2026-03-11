@@ -2,7 +2,7 @@ import type { CorrelationSignal } from './correlation';
 import { mlWorker } from './ml-worker';
 import { generateSummary } from './summarization';
 import { SUPPRESSED_TRENDING_TERMS, escapeRegex, generateSignalId, tokenize } from '@/utils/analysis-constants';
-import { t } from '@/services/i18n';
+import { t, getCurrentLanguage } from '@/services/i18n';
 
 export interface TrendingHeadlineInput {
   title: string;
@@ -528,7 +528,8 @@ async function handleSpike(spike: TrendingSpike, config: TrendingConfig): Promis
       const summary = await generateSummary(
         headlines,
         undefined,
-        `Breaking: "${spike.term}" mentioned ${spike.count}x in ${windowHours}h (${multiplierText})`
+        `Breaking: "${spike.term}" mentioned ${spike.count}x in ${windowHours}h (${multiplierText})`,
+        getCurrentLanguage(),
       );
       if (summary?.summary) {
         description = summary.summary;

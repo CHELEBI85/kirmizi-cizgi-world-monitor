@@ -1,4 +1,4 @@
-{
+﻿{
   "panels": {
     "liveNews": "Live Nyheter",
     "markets": "Marknader",
@@ -2081,7 +2081,7 @@
     "panelCatTradePolicy": "Handelspolitik"
   },
   "app": {
-    "title": "World Monitor",
+    "title": "Kırmızı Çizgi",
     "description": "Global situation med AI-insikter"
   },
   "countryBrief": {
