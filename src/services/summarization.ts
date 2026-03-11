@@ -38,6 +38,13 @@ export interface SummarizeOptions {
 const newsClient = new NewsServiceClient('', { fetch: (...args) => globalThis.fetch(...args) });
 const summaryBreaker = createCircuitBreaker<SummarizeArticleResponse>({ name: 'News Summarization', cacheTtlMs: 0 });
 
+/** Client-side timeout for summarization API (server uses 25s; we allow a bit more for latency). */
+const SUMMARY_REQUEST_TIMEOUT_MS = 35_000;
+
+function summarySignal(): AbortSignal {
+  return AbortSignal.timeout(SUMMARY_REQUEST_TIMEOUT_MS);
+}
+
 const emptySummaryFallback: SummarizeArticleResponse = { summary: '', provider: '', model: '', fallback: true, tokens: 0, error: '', errorType: '', status: 'SUMMARIZE_STATUS_UNSPECIFIED', statusDetail: '' };
 
 // ── Provider definitions ──
@@ -68,14 +75,17 @@ async function tryApiProvider(
   lastAttemptedProvider = providerDef.provider;
   try {
     const resp: SummarizeArticleResponse = await summaryBreaker.execute(async () => {
-      return newsClient.summarizeArticle({
-        provider: providerDef.provider,
-        headlines,
-        mode: 'brief',
-        geoContext: geoContext || '',
-        variant: SITE_VARIANT,
-        lang: lang || 'en',
-      });
+      return newsClient.summarizeArticle(
+        {
+          provider: providerDef.provider,
+          headlines,
+          mode: 'brief',
+          geoContext: geoContext || '',
+          variant: SITE_VARIANT,
+          lang: lang || 'en',
+        },
+        { signal: summarySignal() },
+      );
     }, emptySummaryFallback);
 
     // Provider skipped (credentials missing) or signaled fallback
@@ -192,7 +202,7 @@ async function generateSummaryInternal(
   if (!options?.skipCloudProviders) {
     try {
       const cacheKey = buildSummaryCacheKey(headlines, 'brief', geoContext, SITE_VARIANT, lang);
-      const cached = await newsClient.getSummarizeArticleCache({ cacheKey });
+      const cached = await newsClient.getSummarizeArticleCache({ cacheKey }, { signal: summarySignal() });
       if (cached.summary) {
         return { summary: cached.summary, provider: 'cache', model: cached.model || '', cached: true };
       }
@@ -288,14 +298,17 @@ export async function translateText(
     onProgress?.(i + 1, totalSteps, `Translating with ${providerDef.label}...`);
     try {
       const resp = await summaryBreaker.execute(async () => {
-        return newsClient.summarizeArticle({
-          provider: providerDef.provider,
-          headlines: [text],
-          mode: 'translate',
-          geoContext: '',
-          variant: targetLang,
-          lang: '',
-        });
+        return newsClient.summarizeArticle(
+          {
+            provider: providerDef.provider,
+            headlines: [text],
+            mode: 'translate',
+            geoContext: '',
+            variant: targetLang,
+            lang: '',
+          },
+          { signal: summarySignal() },
+        );
       }, emptySummaryFallback);
 
       if (resp.fallback || resp.status === 'SUMMARIZE_STATUS_SKIPPED') continue;

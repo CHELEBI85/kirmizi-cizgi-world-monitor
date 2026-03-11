@@ -115,6 +115,7 @@ let cachedPosture: CachedTheaterPosture | null = null;
 let fetchPromise: Promise<CachedTheaterPosture | null> | null = null;
 let lastFetchTime = 0;
 const REFETCH_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes - reduce upstream API pressure
+const THEATER_POSTURE_TIMEOUT_MS = 30_000; // 30s - avoid infinite loading
 
 function createAbortError(): DOMException {
   return new DOMException('The operation was aborted.', 'AbortError');
@@ -189,18 +190,40 @@ export async function fetchCachedTheaterPosture(signal?: AbortSignal): Promise<C
   const hasStaleData = cachedPosture?.stale;
 
   fetchPromise = (async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(new DOMException('Theater posture request timed out.', 'TimeoutError')),
+      THEATER_POSTURE_TIMEOUT_MS,
+    );
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timeoutId);
+        controller.abort();
+      } else {
+        signal.addEventListener('abort', () => {
+          clearTimeout(timeoutId);
+          controller.abort();
+        });
+      }
+    }
     try {
-      const resp = await client.getTheaterPosture({ theater: '' });
+      const resp = await client.getTheaterPosture({ theater: '' }, { signal: controller.signal });
       const data = toPostureData(resp);
       cachedPosture = data;
       lastFetchTime = Date.now();
       saveToStorage(data);
       return cachedPosture;
     } catch (error) {
+      // Timeout: return stale cache or null so panel shows "Acquiring data" + retry
+      if (error instanceof DOMException && error.name === 'TimeoutError') {
+        console.warn('[CachedTheaterPosture] Request timed out');
+        return cachedPosture;
+      }
       if (error instanceof DOMException && error.name === 'AbortError') throw error;
       console.error('[CachedTheaterPosture] Fetch error:', error);
       return cachedPosture; // Return stale cache on error
     } finally {
+      clearTimeout(timeoutId);
       fetchPromise = null;
     }
   })();

@@ -418,7 +418,9 @@ export class InsightsPanel extends Panel {
     sentiments: Array<{ label: string; score: number }> | null,
     worldBrief: string | null
   ): void {
-    const briefHtml = worldBrief ? this.renderWorldBrief(worldBrief) : '';
+    const briefHtml = worldBrief
+      ? this.renderWorldBrief(worldBrief)
+      : `<div class="insights-brief insights-brief--unavailable"><div class="insights-section-title">${SITE_VARIANT === 'tech' ? '🚀 TECH BRIEF' : '🌍 WORLD BRIEF'}</div><p class="insights-brief-unavailable">${escapeHtml(t('components.insights.insightsDisabledTitle'))}</p></div>`;
     const focalPointsHtml = this.renderFocalPoints();
     const convergenceHtml = this.renderConvergenceZones();
     const sentimentOverview = this.renderSentimentOverview(sentiments);

@@ -13268,6 +13268,13 @@ a.prediction-link:hover {
   color: var(--text);
 }
 
+.insights-brief--unavailable .insights-brief-unavailable {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0;
+  font-style: italic;
+}
+
 .insights-unavailable,
 .insights-error,
 .insights-empty {
