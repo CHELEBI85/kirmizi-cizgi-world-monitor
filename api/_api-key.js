@@ -10,6 +10,8 @@ const BROWSER_ORIGIN_PATTERNS = [
   /^https:\/\/worldmonitor-[a-z0-9-]+\.vercel\.app$/,
   // Kırmızı Çizgi / rebrand Vercel deployment
   /^https:\/\/kirmizi-cizgi-world-monitor[\w.-]*\.vercel\.app$/,
+  // Kırmızı Çizgi custom domain
+  /^https:\/\/([a-z0-9-]+\.)?kirmizicizgi\.tr$/,
   ...(process.env.NODE_ENV === 'production' ? [] : [
     /^https?:\/\/localhost(:\d+)?$/,
     /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
