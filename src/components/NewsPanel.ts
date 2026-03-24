@@ -25,6 +25,11 @@ interface PreparedCluster {
 
 export class NewsPanel extends Panel {
   private static readonly TITLE_TRANSLATION_CACHE_TTL = 24 * 60 * 60 * 1000;
+  private static translateChain: Promise<void> = Promise.resolve();
+  private static translateCooldownUntil = 0;
+  private static readonly AUTO_TRANSLATE_PER_RENDER = 3;
+  private static readonly TRANSLATE_GAP_MS = 1200;
+  private static readonly FAILED_RETRY_DELAY_MS = 30_000;
   private clusteredMode = true;
   private deviationEl: HTMLElement | null = null;
   private relatedAssetContext = new Map<string, RelatedAssetContext>();
@@ -46,6 +51,7 @@ export class NewsPanel extends Panel {
   private isSummarizing = false;
   private titleTranslationCache = new Map<string, string>();
   private titleTranslationInflight = new Map<string, Promise<string | null>>();
+  private retryFailedTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(id: string, title: string) {
     super({ id, title, showCount: true, trackActivity: true });
@@ -198,8 +204,7 @@ export class NewsPanel extends Panel {
 
     const originalText = titleEl.textContent || '';
 
-    // Visual feedback
-    element.innerHTML = '...';
+    this.setTranslateButtonState(element, 'translating');
     element.style.pointerEvents = 'none';
 
     try {
@@ -209,22 +214,91 @@ export class NewsPanel extends Panel {
         titleEl.textContent = translated;
         titleEl.dataset.autoTranslated = '1';
         titleEl.dataset.original = originalText;
-        element.innerHTML = '✓';
-        element.title = 'Original: ' + originalText;
-        element.classList.add('translated');
+        this.setTranslateButtonState(element, 'translated', originalText);
       } else {
-        element.innerHTML = '文';
-        // Shake animation or error state could be added here
+        this.setTranslateButtonState(element, 'failed');
       }
     } catch (e) {
       if (!this.element?.isConnected) return;
       console.error('Translation failed', e);
-      element.innerHTML = '文';
+      this.setTranslateButtonState(element, 'failed');
     } finally {
       if (element.isConnected) {
         element.style.pointerEvents = 'auto';
       }
     }
+  }
+
+  private setTranslateButtonState(
+    button: Element | null,
+    state: 'idle' | 'translating' | 'translated' | 'failed',
+    originalText?: string,
+  ): void {
+    if (!(button instanceof HTMLElement)) return;
+    button.classList.remove('is-translating', 'is-translated', 'is-failed');
+    if (state === 'idle') {
+      button.textContent = 'TR';
+      button.title = 'Ceviri bekleniyor';
+      return;
+    }
+    if (state === 'translating') {
+      button.classList.add('is-translating');
+      button.textContent = '...';
+      button.title = 'Ceviriliyor...';
+      return;
+    }
+    if (state === 'translated') {
+      button.classList.add('is-translated');
+      button.textContent = '✓';
+      button.title = originalText ? `Orijinal: ${originalText}` : 'Cevirildi';
+      delete button.dataset.needsRetry;
+      return;
+    }
+    button.classList.add('is-failed');
+    button.textContent = '!';
+    button.title = 'Ceviri sinirina takildi, sonra tekrar dener';
+    button.dataset.needsRetry = '1';
+    this.scheduleFailedRetry();
+  }
+
+  private scheduleFailedRetry(): void {
+    if (this.retryFailedTimer || !this.element?.isConnected) return;
+    this.retryFailedTimer = setTimeout(() => {
+      this.retryFailedTimer = null;
+      void this.retryFailedTranslations();
+    }, NewsPanel.FAILED_RETRY_DELAY_MS);
+  }
+
+  private async retryFailedTranslations(): Promise<void> {
+    if (!this.element?.isConnected) return;
+    const currentLang = getCurrentLanguage();
+    if (currentLang === 'en') return;
+
+    const failedButtons = Array.from(
+      this.content.querySelectorAll<HTMLElement>('.item-translate-btn[data-needs-retry="1"]'),
+    );
+    if (failedButtons.length === 0) return;
+
+    // Keep retry pass lightweight: retry up to 2 items per pass.
+    // Prioritize buttons visible in the current scroll viewport.
+    const visible = failedButtons.filter((btn) => this.isInPanelViewport(btn));
+    const retryTargets = (visible.length > 0 ? visible : failedButtons).slice(0, 2);
+    for (const btn of retryTargets) {
+      if (!this.element?.isConnected) return;
+      const text = btn.dataset.text;
+      if (!text) continue;
+      await this.handleTranslate(btn, text);
+    }
+
+    // If there are still failed items, schedule the next low-frequency retry.
+    const remaining = this.content.querySelector('.item-translate-btn[data-needs-retry="1"]');
+    if (remaining) this.scheduleFailedRetry();
+  }
+
+  private isInPanelViewport(el: HTMLElement): boolean {
+    const elRect = el.getBoundingClientRect();
+    const containerRect = this.content.getBoundingClientRect();
+    return elRect.bottom >= containerRect.top && elRect.top <= containerRect.bottom;
   }
 
   private showSummary(summary: string): void {
@@ -364,7 +438,7 @@ export class NewsPanel extends Panel {
         <a class="item-title" href="${sanitizeUrl(item.link)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a>
         <div class="item-time">
           ${formatTime(item.pubDate)}
-          ${getCurrentLanguage() !== 'en' ? `<button class="item-translate-btn" title="Translate" data-text="${escapeHtml(item.title)}">文</button>` : ''}
+          ${getCurrentLanguage() !== 'en' ? `<button class="item-translate-btn" title="Ceviri bekleniyor" data-text="${escapeHtml(item.title)}">TR</button>` : ''}
         </div>
       </div>
     `
@@ -497,25 +571,57 @@ export class NewsPanel extends Panel {
     return p;
   }
 
+  private enqueueTranslationTask<T>(task: () => Promise<T>): Promise<T> {
+    const run = async () => {
+      const now = Date.now();
+      const waitMs = Math.max(0, NewsPanel.translateCooldownUntil - now);
+      if (waitMs > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+      }
+      const result = await task();
+      await new Promise<void>((resolve) => setTimeout(resolve, NewsPanel.TRANSLATE_GAP_MS));
+      return result;
+    };
+    const queued = NewsPanel.translateChain.then(run, run);
+    NewsPanel.translateChain = queued.then(() => undefined, () => undefined);
+    return queued;
+  }
+
   private async autoTranslateRenderedTitles(): Promise<void> {
     const currentLang = getCurrentLanguage();
     if (currentLang === 'en') return;
     const titleEls = Array.from(this.content.querySelectorAll<HTMLAnchorElement>('.item-title'));
+    let translatedThisRender = 0;
 
     for (const titleEl of titleEls) {
       if (!this.element?.isConnected) return;
       if (titleEl.dataset.autoTranslated === '1') continue;
+      if (translatedThisRender >= NewsPanel.AUTO_TRANSLATE_PER_RENDER) break;
 
       const original = (titleEl.dataset.original || titleEl.textContent || '').trim();
       if (!original) continue;
+      // Skip obviously Turkish text to avoid wasting API quota.
+      if (/[ğüşöçıİĞÜŞÖÇ]/.test(original)) {
+        titleEl.dataset.autoTranslated = '1';
+        continue;
+      }
 
-      const translated = await this.translateHeadlineText(original, currentLang);
+      const button: Element | null = titleEl.closest('.item')?.querySelector('.item-translate-btn') ?? null;
+      this.setTranslateButtonState(button, 'translating');
+      const translated = await this.enqueueTranslationTask(() => this.translateHeadlineText(original, currentLang));
       if (!this.element?.isConnected) return;
-      if (!translated || translated === original) continue;
+      if (!translated || translated === original) {
+        // Provider limits/errors: short global cooldown to prevent request storms.
+        NewsPanel.translateCooldownUntil = Date.now() + 15_000;
+        this.setTranslateButtonState(button, 'failed');
+        continue;
+      }
 
       titleEl.dataset.original = original;
       titleEl.textContent = translated;
       titleEl.dataset.autoTranslated = '1';
+      this.setTranslateButtonState(button, 'translated', original);
+      translatedThisRender += 1;
     }
   }
 
@@ -656,7 +762,7 @@ export class NewsPanel extends Panel {
         <div class="cluster-meta">
           <span class="top-sources">${topSourcesHtml}</span>
           <span class="item-time">${formatTime(cluster.lastUpdated)}</span>
-          ${getCurrentLanguage() !== 'en' ? `<button class="item-translate-btn" title="Translate" data-text="${escapeHtml(cluster.primaryTitle)}">文</button>` : ''}
+          ${getCurrentLanguage() !== 'en' ? `<button class="item-translate-btn" title="Ceviri bekleniyor" data-text="${escapeHtml(cluster.primaryTitle)}">TR</button>` : ''}
         </div>
         ${relatedAssetsHtml}
       </div>
@@ -725,6 +831,10 @@ export class NewsPanel extends Panel {
     // Clean up windowed list
     this.windowedList?.destroy();
     this.windowedList = null;
+    if (this.retryFailedTimer) {
+      clearTimeout(this.retryFailedTimer);
+      this.retryFailedTimer = null;
+    }
 
     // Remove activity tracking listeners
     if (this.boundScrollHandler) {

@@ -3011,6 +3011,33 @@ body.live-news-fullscreen-active .panels-grid > *:not(.live-news-fullscreen) {
   margin-top: 4px;
 }
 
+.item-translate-btn {
+  margin-left: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 4px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 4px;
+  cursor: pointer;
+}
+
+.item-translate-btn.is-translating {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.item-translate-btn.is-translated {
+  color: #22c55e;
+  border-color: #22c55e66;
+}
+
+.item-translate-btn.is-failed {
+  color: #f59e0b;
+  border-color: #f59e0b66;
+}
+
 /* Clustering */
 .source-count {
   background: var(--accent);
