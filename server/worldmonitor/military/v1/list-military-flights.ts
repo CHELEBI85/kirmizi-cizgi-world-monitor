@@ -35,6 +35,10 @@ function getRelayRequestHeaders(): Record<string, string> {
     headers[relayHeader] = relaySecret;
     headers.Authorization = `Bearer ${relaySecret}`;
   }
+  // Direct OpenSky mode (no relay): attach Basic auth when credentials are present.
+  if (!process.env.WS_RELAY_URL && process.env.OPENSKY_CLIENT_ID && process.env.OPENSKY_CLIENT_SECRET) {
+    headers.Authorization = `Basic ${btoa(`${process.env.OPENSKY_CLIENT_ID}:${process.env.OPENSKY_CLIENT_SECRET}`)}`;
+  }
   return headers;
 }
 
@@ -91,9 +95,12 @@ export async function listMilitaryFlights(
       REDIS_CACHE_TTL,
       async () => {
         const isSidecar = (process.env.LOCAL_API_MODE || '').includes('sidecar');
-        const baseUrl = isSidecar
-          ? 'https://opensky-network.org/api/states/all'
-          : process.env.WS_RELAY_URL ? process.env.WS_RELAY_URL + '/opensky' : null;
+        const hasOpenSkyCreds = Boolean(process.env.OPENSKY_CLIENT_ID && process.env.OPENSKY_CLIENT_SECRET);
+        const baseUrl = process.env.WS_RELAY_URL
+          ? `${process.env.WS_RELAY_URL}/opensky`
+          : (isSidecar || hasOpenSkyCreds)
+            ? 'https://opensky-network.org/api/states/all'
+            : null;
 
         if (!baseUrl) return null;
 

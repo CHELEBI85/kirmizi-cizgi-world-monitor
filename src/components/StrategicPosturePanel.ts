@@ -387,7 +387,7 @@ export class StrategicPosturePanel extends Panel {
 
       return `
         <div class="posture-theater posture-compact" data-lat="${p.centerLat}" data-lon="${p.centerLon}" title="${t('components.strategicPosture.clickToView', { name: escapeHtml(displayName) })}">
-          <span class="posture-name">${escapeHtml(p.shortName)}</span>
+          <span class="posture-name">${escapeHtml(displayName)}</span>
           <div class="posture-chips">${chips.join('')}</div>
           ${this.getPostureBadge(p.postureLevel)}
         </div>
@@ -459,10 +459,18 @@ export class StrategicPosturePanel extends Panel {
     const staleWarning = this.isStale
       ? `<div class="posture-stale-warning">⚠️ ${t('components.strategicPosture.staleWarning')}</div>`
       : '';
+    const quickLegend = `
+      <div class="posture-quick-legend">
+        <span class="posture-quick-legend-item"><strong>KRIT</strong>: yuksek yogunluk</span>
+        <span class="posture-quick-legend-item"><strong>ARTM</strong>: artmis hareketlilik</span>
+        <span class="posture-quick-legend-item"><strong>NORM</strong>: normal seviye</span>
+      </div>
+    `;
 
     const html = `
       <div class="posture-panel">
         ${staleWarning}
+        ${quickLegend}
         ${sorted.map((p) => this.renderTheater(p)).join('')}
 
         <div class="posture-footer">

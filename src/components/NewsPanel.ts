@@ -24,6 +24,7 @@ interface PreparedCluster {
 }
 
 export class NewsPanel extends Panel {
+  private static readonly TITLE_TRANSLATION_CACHE_TTL = 24 * 60 * 60 * 1000;
   private clusteredMode = true;
   private deviationEl: HTMLElement | null = null;
   private relatedAssetContext = new Map<string, RelatedAssetContext>();
@@ -43,6 +44,8 @@ export class NewsPanel extends Panel {
   private currentHeadlines: string[] = [];
   private lastHeadlineSignature = '';
   private isSummarizing = false;
+  private titleTranslationCache = new Map<string, string>();
+  private titleTranslationInflight = new Map<string, Promise<string | null>>();
 
   constructor(id: string, title: string) {
     super({ id, title, showCount: true, trackActivity: true });
@@ -65,7 +68,10 @@ export class NewsPanel extends Panel {
         prepared.shouldHighlight,
         prepared.showNewTag
       ),
-      () => this.bindRelatedAssetEvents()
+      () => {
+        this.bindRelatedAssetEvents();
+        void this.autoTranslateRenderedTitles();
+      }
     );
   }
 
@@ -197,10 +203,11 @@ export class NewsPanel extends Panel {
     element.style.pointerEvents = 'none';
 
     try {
-      const translated = await translateText(text, currentLang);
+      const translated = await this.translateHeadlineText(text, currentLang);
       if (!this.element?.isConnected) return;
       if (translated) {
         titleEl.textContent = translated;
+        titleEl.dataset.autoTranslated = '1';
         titleEl.dataset.original = originalText;
         element.innerHTML = '✓';
         element.title = 'Original: ' + originalText;
@@ -365,6 +372,7 @@ export class NewsPanel extends Panel {
       .join('');
 
     this.setContent(html);
+    void this.autoTranslateRenderedTitles();
   }
 
   private renderClusters(clusters: ClusteredEvent[]): void {
@@ -424,6 +432,90 @@ export class NewsPanel extends Panel {
         .join('');
       this.setContent(html);
       this.bindRelatedAssetEvents();
+      void this.autoTranslateRenderedTitles();
+    }
+  }
+
+  private getTitleTranslationStorageKey(text: string, lang: string): string {
+    return `title_translation_v1_${lang}_${text}`;
+  }
+
+  private getCachedTitleTranslation(text: string, lang: string): string | null {
+    const memKey = `${lang}:${text}`;
+    const memoryValue = this.titleTranslationCache.get(memKey);
+    if (memoryValue) return memoryValue;
+    try {
+      const raw = localStorage.getItem(this.getTitleTranslationStorageKey(text, lang));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { translated: string; ts: number };
+      if (!parsed?.translated || !parsed?.ts) return null;
+      if (Date.now() - parsed.ts > NewsPanel.TITLE_TRANSLATION_CACHE_TTL) {
+        localStorage.removeItem(this.getTitleTranslationStorageKey(text, lang));
+        return null;
+      }
+      this.titleTranslationCache.set(memKey, parsed.translated);
+      return parsed.translated;
+    } catch {
+      return null;
+    }
+  }
+
+  private setCachedTitleTranslation(text: string, lang: string, translated: string): void {
+    const memKey = `${lang}:${text}`;
+    this.titleTranslationCache.set(memKey, translated);
+    try {
+      localStorage.setItem(
+        this.getTitleTranslationStorageKey(text, lang),
+        JSON.stringify({ translated, ts: Date.now() }),
+      );
+    } catch {
+      // ignore storage quota issues
+    }
+  }
+
+  private async translateHeadlineText(text: string, lang: string): Promise<string | null> {
+    const normalized = text.trim();
+    if (!normalized) return null;
+    const cached = this.getCachedTitleTranslation(normalized, lang);
+    if (cached) return cached;
+
+    const inflightKey = `${lang}:${normalized}`;
+    const existing = this.titleTranslationInflight.get(inflightKey);
+    if (existing) return existing;
+
+    const p = (async () => {
+      const translated = await translateText(normalized, lang);
+      if (!translated || !translated.trim()) return null;
+      this.setCachedTitleTranslation(normalized, lang, translated.trim());
+      return translated.trim();
+    })()
+      .finally(() => {
+        this.titleTranslationInflight.delete(inflightKey);
+      });
+
+    this.titleTranslationInflight.set(inflightKey, p);
+    return p;
+  }
+
+  private async autoTranslateRenderedTitles(): Promise<void> {
+    const currentLang = getCurrentLanguage();
+    if (currentLang === 'en') return;
+    const titleEls = Array.from(this.content.querySelectorAll<HTMLAnchorElement>('.item-title'));
+
+    for (const titleEl of titleEls) {
+      if (!this.element?.isConnected) return;
+      if (titleEl.dataset.autoTranslated === '1') continue;
+
+      const original = (titleEl.dataset.original || titleEl.textContent || '').trim();
+      if (!original) continue;
+
+      const translated = await this.translateHeadlineText(original, currentLang);
+      if (!this.element?.isConnected) return;
+      if (!translated || translated === original) continue;
+
+      titleEl.dataset.original = original;
+      titleEl.textContent = translated;
+      titleEl.dataset.autoTranslated = '1';
     }
   }
 

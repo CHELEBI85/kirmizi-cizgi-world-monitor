@@ -357,7 +357,17 @@ export class LiveNewsPanel extends Panel {
     this.playerElementId = `live-news-player-${Date.now()}`;
     this.channels = loadChannelsFromStorage();
     if (this.channels.length === 0) this.channels = getDefaultLiveChannels();
-    this.activeChannel = this.channels[0]!;
+    if (!this.channels.some((c) => c.id === 'trt-haber')) {
+      this.channels.unshift({
+        id: 'trt-haber',
+        name: 'TRT Haber',
+        handle: '@trthaber',
+        fallbackVideoId: '3XHebGJG0bc',
+      });
+      this.saveChannels();
+    }
+    const preferredDefaultChannel = this.channels.find((c) => c.id === 'trt-haber');
+    this.activeChannel = preferredDefaultChannel || this.channels[0]!;
     this.createLiveButton();
     this.createMuteButton();
     this.createChannelSwitcher();

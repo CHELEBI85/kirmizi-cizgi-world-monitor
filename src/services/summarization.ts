@@ -319,5 +319,20 @@ export async function translateText(
     }
   }
 
+  // Last resort: local browser model (works without cloud quota, lower quality)
+  if (mlWorker.isAvailable) {
+    try {
+      onProgress?.(totalSteps, totalSteps, 'Translating with local model...');
+      const prompt = targetLang === 'tr'
+        ? `Su metni Turkceye cevir. Yalnizca ceviriyi dondur, aciklama ekleme: ${text}`
+        : `Translate this text to ${targetLang}. Return only the translation: ${text}`;
+      const [localResult] = await mlWorker.summarize([prompt], BETA_MODE ? 'summarization-beta' : undefined);
+      const translated = (localResult || '').trim();
+      if (translated && translated.length >= 3) return translated;
+    } catch (e) {
+      console.warn('Browser translation fallback failed', e);
+    }
+  }
+
   return null;
 }

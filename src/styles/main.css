@@ -14288,6 +14288,21 @@ body.has-breaking-alert .panels-grid {
   padding: 12px;
 }
 
+.posture-quick-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--overlay-subtle);
+  border: 1px solid var(--border);
+}
+
+.posture-quick-legend-item {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
 .posture-theater {
   border-radius: 8px;
   cursor: pointer;
@@ -14374,7 +14389,7 @@ body.has-breaking-alert .panels-grid {
 .posture-compact .posture-name {
   font-weight: 500;
   font-size: 12px;
-  min-width: 60px;
+  min-width: 120px;
 }
 
 .posture-chips {

@@ -877,7 +877,11 @@ export class PanelLayoutManager implements AppModule {
   private getSavedBottomPanelOrder(): string[] {
     try {
       const saved = localStorage.getItem(this.ctx.PANEL_ORDER_KEY + '-bottom');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) return JSON.parse(saved);
+      // Default: fill bottom zone with key panels when user hasn't customized
+      const defaultBottom = ['insights', 'strategic-posture', 'strategic-risk'];
+      const valid = defaultBottom.filter((k) => k in DEFAULT_PANELS);
+      return valid;
     } catch {
       return [];
     }
